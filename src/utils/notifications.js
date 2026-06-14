@@ -98,14 +98,14 @@ export async function cancelAlarmNotification(alarmId) {
   }
 }
 
-export async function scheduleSnoozeNotification(alarm, minutes) {
+export async function scheduleSnoozeNotification(alarm, minutes, snoozesUsed) {
   const date = new Date(Date.now() + minutes * 60000);
   const notifId = await Notifications.scheduleNotificationAsync({
     content: {
       title: "⏰ " + alarm.label,
       body: "נודניק! הזמן להתעורר שוב.",
       sound: "default",
-      data: { alarmId: alarm.id, type: "snooze" },
+      data: { alarmId: alarm.id, type: "snooze", snoozesUsed },
       priority: Notifications.AndroidNotificationPriority.MAX,
       channelId: "alarms",
     },

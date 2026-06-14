@@ -103,3 +103,22 @@ export const DAY_NAMES = [
   "שישי",
   "שבת",
 ];
+
+const CUSTOM_RINGTONES_KEY = "@wakeup_custom_ringtones";
+
+export async function loadCustomRingtones() {
+  try {
+    const raw = await AsyncStorage.getItem(CUSTOM_RINGTONES_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+export async function saveCustomRingtones(ringtones) {
+  try {
+    await AsyncStorage.setItem(CUSTOM_RINGTONES_KEY, JSON.stringify(ringtones));
+  } catch (e) {
+    console.error("Failed to save custom ringtones", e);
+  }
+}

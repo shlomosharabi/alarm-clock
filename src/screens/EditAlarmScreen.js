@@ -9,6 +9,7 @@ import {
   Alert,
   StatusBar,
   Platform,
+  Switch,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
@@ -20,6 +21,8 @@ import {
   DAY_LABELS,
   DAY_NAMES,
   getNextAlarmMs,
+  loadCustomRingtones,
+  saveCustomRingtones,
 } from "../store/alarmStore";
 import {
   scheduleAlarmNotification,
@@ -215,14 +218,23 @@ function SectionLabel({ label, icon }) {
   );
 }
 
+
+
 export default function EditAlarmScreen({ route, navigation }) {
   const existingAlarm = route.params?.alarm;
   const [alarm, setAlarm] = useState(existingAlarm || defaultAlarm());
+  const [customRingtones, setCustomRingtones] = useState([]);
+  const [chooseBigFiles, setChooseBigFiles] = useState(true);
 
   useEffect(() => {
     navigation.setOptions({
       title: existingAlarm ? "עריכת שעון מעורר" : "שעון מעורר חדש",
     });
+    const fetchCustomRingtones = async () => {
+      const list = await loadCustomRingtones();
+      setCustomRingtones(list);
+    };
+    fetchCustomRingtones();
   }, []);
 
   const update = (key, val) => setAlarm((a) => ({ ...a, [key]: val }));
@@ -243,15 +255,63 @@ export default function EditAlarmScreen({ route, navigation }) {
   };
 
   const pickSoundFile = async () => {
-    const result = await DocumentPicker.getDocumentAsync({
-      type: "audio/*",
-      copyToCacheDirectory: true,
-    });
-    if (result.type === "success") {
+    try {
+      const mimeType = chooseBigFiles ? "*/*" : "audio/*";
+      const result = await DocumentPicker.getDocumentAsync({
+        type: mimeType,
+        copyToCacheDirectory: true,
+      });
+      if (result && !result.canceled && result.assets && result.assets.length > 0) {
+        const asset = result.assets[0];
+        const newSound = asset.uri;
+        const newLabel = asset.name || "קובץ קול";
+
+        setAlarm((a) => ({
+          ...a,
+          sound: newSound,
+          soundLabel: newLabel,
+        }));
+
+        setCustomRingtones((prevList) => {
+          const exists = prevList.some((r) => r.uri === newSound);
+          if (exists) return prevList;
+          const newList = [...prevList, { uri: newSound, name: newLabel }];
+          saveCustomRingtones(newList);
+          return newList;
+        });
+      } else if (result && result.type === "success") {
+        const newSound = result.uri;
+        const newLabel = result.name || "קובץ קול";
+
+        setAlarm((a) => ({
+          ...a,
+          sound: newSound,
+          soundLabel: newLabel,
+        }));
+
+        setCustomRingtones((prevList) => {
+          const exists = prevList.some((r) => r.uri === newSound);
+          if (exists) return prevList;
+          const newList = [...prevList, { uri: newSound, name: newLabel }];
+          saveCustomRingtones(newList);
+          return newList;
+        });
+      }
+    } catch (error) {
+      console.error("Error picking sound file:", error);
+    }
+  };
+
+  const removeCustomRingtone = async (uri) => {
+    const newList = customRingtones.filter((r) => r.uri !== uri);
+    setCustomRingtones(newList);
+    await saveCustomRingtones(newList);
+
+    if (alarm.sound === uri) {
       setAlarm((a) => ({
         ...a,
-        sound: result.uri,
-        soundLabel: result.name || "קובץ קול",
+        sound: "tone1",
+        soundLabel: "צלצול 1",
       }));
     }
   };
@@ -628,7 +688,55 @@ export default function EditAlarmScreen({ route, navigation }) {
                 שקט
               </Text>
             </TouchableOpacity>
+
+            {customRingtones.map((custom) => (
+              <View
+                key={custom.uri}
+                style={[
+                  styles.customChipContainer,
+                  alarm.sound === custom.uri && styles.customChipContainerActive,
+                ]}
+              >
+                <TouchableOpacity
+                  style={{ flexShrink: 1, paddingVertical: 8, paddingLeft: 12, paddingRight: 6 }}
+                  onPress={() =>
+                    setAlarm((a) => ({
+                      ...a,
+                      sound: custom.uri,
+                      soundLabel: custom.name,
+                    }))
+                  }
+                >
+                  <Text
+                    style={[
+                      styles.chipText,
+                      alarm.sound === custom.uri && styles.chipTextActive,
+                    ]}
+                    numberOfLines={1}
+                  >
+                    {custom.name}
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={{ padding: 8, justifyContent: "center", borderLeftWidth: 1, borderLeftColor: "#2a2a40" }}
+                  onPress={() => removeCustomRingtone(custom.uri)}
+                >
+                  <Ionicons name="trash-outline" size={14} color="#ef4444" />
+                </TouchableOpacity>
+              </View>
+            ))}
           </View>
+
+          <View style={styles.switchRow}>
+            <Text style={styles.switchLabel}>אפשר בחירת קבצים גדולים / לא מזוהים</Text>
+            <Switch
+              value={chooseBigFiles}
+              onValueChange={setChooseBigFiles}
+              trackColor={{ false: "#1a1a30", true: "#6c63ff" }}
+              thumbColor={chooseBigFiles ? "#fff" : "#8888aa"}
+            />
+          </View>
+
           <TouchableOpacity style={styles.fileButton} onPress={pickSoundFile}>
             <Text style={styles.fileButtonText}>בחר קובץ קול מהמכשיר</Text>
           </TouchableOpacity>
@@ -857,5 +965,32 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#fff",
     letterSpacing: 0.5,
+  },
+  customChipContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderRadius: 20,
+    backgroundColor: "#0a0a18",
+    borderWidth: 1,
+    borderColor: "#2a2a40",
+    overflow: "hidden",
+    maxWidth: "100%",
+  },
+  customChipContainerActive: {
+    borderColor: "#6c63ff",
+    backgroundColor: "#1a1a30",
+  },
+  switchRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: 14,
+    marginBottom: 6,
+    paddingHorizontal: 4,
+  },
+  switchLabel: {
+    fontSize: 14,
+    color: "#ccccdd",
+    fontWeight: "500",
   },
 });

@@ -23,6 +23,19 @@ const navigationRef = createNavigationContainerRef();
 const Stack = createNativeStackNavigator();
 
 export default function App() {
+  const navigateToAlarm = (alarmId, snoozesUsed = 0) => {
+    if (navigationRef.isReady()) {
+      navigationRef.navigate("AlarmRinging", { alarmId, snoozesUsed });
+    } else {
+      const interval = setInterval(() => {
+        if (navigationRef.isReady()) {
+          navigationRef.navigate("AlarmRinging", { alarmId, snoozesUsed });
+          clearInterval(interval);
+        }
+      }, 100);
+    }
+  };
+
   useEffect(() => {
     (async () => {
       await setupNotificationChannel();
@@ -31,17 +44,17 @@ export default function App() {
 
     const responseListener =
       Notifications.addNotificationResponseReceivedListener((response) => {
-        const alarmId = response.notification.request.content.data?.alarmId;
-        if (alarmId && navigationRef.isReady()) {
-          navigationRef.navigate("AlarmRinging", { alarmId });
+        const data = response.notification.request.content.data;
+        if (data?.alarmId) {
+          navigateToAlarm(data.alarmId, data.snoozesUsed || 0);
         }
       });
 
     const receivedListener = Notifications.addNotificationReceivedListener(
       (notification) => {
-        const alarmId = notification.request.content.data?.alarmId;
-        if (alarmId && navigationRef.isReady()) {
-          navigationRef.navigate("AlarmRinging", { alarmId });
+        const data = notification.request.content.data;
+        if (data?.alarmId) {
+          navigateToAlarm(data.alarmId, data.snoozesUsed || 0);
         }
       },
     );
@@ -52,9 +65,17 @@ export default function App() {
     };
   }, []);
 
+  const handleInitialNotification = async () => {
+    const response = await Notifications.getLastNotificationResponseAsync();
+    const data = response?.notification?.request?.content?.data;
+    if (data?.alarmId) {
+      navigateToAlarm(data.alarmId, data.snoozesUsed || 0);
+    }
+  };
+
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <NavigationContainer ref={navigationRef}>
+      <NavigationContainer ref={navigationRef} onReady={handleInitialNotification}>
         <StatusBar style="light" />
         <Stack.Navigator
           screenOptions={{
