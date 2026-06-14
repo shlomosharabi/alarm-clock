@@ -1,20 +1,24 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
-const ALARMS_KEY = '@wakeup_alarms';
+const ALARMS_KEY = "@wakeup_alarms";
 
 export const defaultAlarm = () => ({
   id: Date.now().toString(),
-  label: 'שעון מעורר',
+  label: "שעון מעורר",
   hour: 7,
   minute: 0,
   days: [], // 0=Sun,1=Mon,...,6=Sat — empty = one-time
   enabled: true,
   snoozeLimit: 5, // minutes
+  snoozeCount: 3,
   ringDuration: 60, // seconds max ring time
-  task: 'math', // 'math' | 'word' | 'sequence' | 'none'
-  taskDifficulty: 'medium', // 'easy' | 'medium' | 'hard'
+  task: "math", // 'math' | 'word' | 'sequence' | 'none'
+  tasks: ["math"],
+  taskCount: 1,
+  taskDifficulty: "medium", // 'easy' | 'medium' | 'hard'
   vibrate: true,
-  sound: 'default',
+  sound: "tone1",
+  soundLabel: "ברירת מחדל",
   createdAt: Date.now(),
 });
 
@@ -31,7 +35,7 @@ export async function saveAlarms(alarms) {
   try {
     await AsyncStorage.setItem(ALARMS_KEY, JSON.stringify(alarms));
   } catch (e) {
-    console.error('Failed to save alarms', e);
+    console.error("Failed to save alarms", e);
   }
 }
 
@@ -60,8 +64,8 @@ export async function deleteAlarm(id) {
 }
 
 export function formatAlarmTime(hour, minute) {
-  const h = hour.toString().padStart(2, '0');
-  const m = minute.toString().padStart(2, '0');
+  const h = hour.toString().padStart(2, "0");
+  const m = minute.toString().padStart(2, "0");
   return `${h}:${m}`;
 }
 
@@ -72,7 +76,7 @@ export function getNextAlarmMs(hour, minute, days) {
 
   if (days.length === 0) {
     // one-time: if time passed today, schedule tomorrow
-    if (target <= now) target.setDate(target.getDate() + 1);
+    if (target < now) target.setDate(target.getDate() + 1);
     return target.getTime();
   }
 
@@ -89,5 +93,13 @@ export function getNextAlarmMs(hour, minute, days) {
   return null;
 }
 
-export const DAY_LABELS = ['א', 'ב', 'ג', 'ד', 'ה', 'ו', 'ש'];
-export const DAY_NAMES = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'];
+export const DAY_LABELS = ["א", "ב", "ג", "ד", "ה", "ו", "ש"];
+export const DAY_NAMES = [
+  "ראשון",
+  "שני",
+  "שלישי",
+  "רביעי",
+  "חמישי",
+  "שישי",
+  "שבת",
+];

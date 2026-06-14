@@ -1,5 +1,5 @@
-import * as Notifications from 'expo-notifications';
-import { Platform } from 'react-native';
+import * as Notifications from "expo-notifications";
+import { Platform } from "react-native";
 
 export async function requestNotificationPermissions() {
   const { status } = await Notifications.requestPermissionsAsync({
@@ -9,19 +9,19 @@ export async function requestNotificationPermissions() {
       allowSound: true,
     },
   });
-  return status === 'granted';
+  return status === "granted";
 }
 
 export async function setupNotificationChannel() {
-  if (Platform.OS === 'android') {
-    await Notifications.setNotificationChannelAsync('alarms', {
-      name: 'שעוני מעורר',
+  if (Platform.OS === "android") {
+    await Notifications.setNotificationChannelAsync("alarms", {
+      name: "שעוני מעורר",
       importance: Notifications.AndroidImportance.MAX,
       vibrationPattern: [0, 250, 250, 250],
-      lightColor: '#6c63ff',
+      lightColor: "#6c63ff",
       lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
       bypassDnd: true,
-      sound: 'default',
+      sound: "default",
     });
   }
 }
@@ -46,20 +46,20 @@ export async function scheduleAlarmNotification(alarm) {
 
   if (days.length === 0) {
     // One-time alarm
-    if (target <= now) target.setDate(target.getDate() + 1);
+    if (target < now) target.setDate(target.getDate() + 1);
     const notifId = await Notifications.scheduleNotificationAsync({
       content: {
-        title: '⏰ ' + label,
-        body: 'הגיע הזמן להתעורר!',
-        sound: 'default',
-        data: { alarmId: id, type: 'alarm' },
+        title: "⏰ " + label,
+        body: "הגיע הזמן להתעורר!",
+        sound: "default",
+        data: { alarmId: id, type: "alarm" },
         priority: Notifications.AndroidNotificationPriority.MAX,
-        categoryIdentifier: 'alarm',
+        categoryIdentifier: "alarm",
       },
       trigger: {
         type: Notifications.SchedulableTriggerInputTypes.DATE,
         date: target,
-        channelId: 'alarms',
+        channelId: "alarms",
       },
     });
     return [notifId];
@@ -69,10 +69,10 @@ export async function scheduleAlarmNotification(alarm) {
     for (const day of days) {
       const notifId = await Notifications.scheduleNotificationAsync({
         content: {
-          title: '⏰ ' + label,
-          body: 'הגיע הזמן להתעורר!',
-          sound: 'default',
-          data: { alarmId: id, type: 'alarm' },
+          title: "⏰ " + label,
+          body: "הגיע הזמן להתעורר!",
+          sound: "default",
+          data: { alarmId: id, type: "alarm" },
           priority: Notifications.AndroidNotificationPriority.MAX,
         },
         trigger: {
@@ -80,7 +80,7 @@ export async function scheduleAlarmNotification(alarm) {
           weekday: day + 1, // Expo: 1=Sun
           hour,
           minute,
-          channelId: 'alarms',
+          channelId: "alarms",
         },
       });
       notifIds.push(notifId);
@@ -96,6 +96,26 @@ export async function cancelAlarmNotification(alarmId) {
       await Notifications.cancelScheduledNotificationAsync(notif.identifier);
     }
   }
+}
+
+export async function scheduleSnoozeNotification(alarm, minutes) {
+  const date = new Date(Date.now() + minutes * 60000);
+  const notifId = await Notifications.scheduleNotificationAsync({
+    content: {
+      title: "⏰ " + alarm.label,
+      body: "נודניק! הזמן להתעורר שוב.",
+      sound: "default",
+      data: { alarmId: alarm.id, type: "snooze" },
+      priority: Notifications.AndroidNotificationPriority.MAX,
+      channelId: "alarms",
+    },
+    trigger: {
+      type: Notifications.SchedulableTriggerInputTypes.DATE,
+      date,
+      channelId: "alarms",
+    },
+  });
+  return notifId;
 }
 
 export async function cancelAllNotifications() {

@@ -1,17 +1,33 @@
-import React, { useState, useCallback, useEffect, useRef } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from "react";
 import {
-  View, Text, StyleSheet, FlatList, TouchableOpacity,
-  Switch, Animated, Dimensions, StatusBar, Alert,
-} from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
-import { Ionicons } from '@expo/vector-icons';
-import { useFocusEffect } from '@react-navigation/native';
+  View,
+  Text,
+  StyleSheet,
+  FlatList,
+  TouchableOpacity,
+  Switch,
+  Animated,
+  Dimensions,
+  StatusBar,
+  Alert,
+} from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
+import { Ionicons } from "@expo/vector-icons";
+import { useFocusEffect } from "@react-navigation/native";
 import {
-  loadAlarms, updateAlarm, deleteAlarm, formatAlarmTime, DAY_LABELS,
-} from '../store/alarmStore';
-import { scheduleAlarmNotification, cancelAlarmNotification } from '../utils/notifications';
+  loadAlarms,
+  updateAlarm,
+  deleteAlarm,
+  formatAlarmTime,
+  DAY_LABELS,
+  getNextAlarmMs,
+} from "../store/alarmStore";
+import {
+  scheduleAlarmNotification,
+  cancelAlarmNotification,
+} from "../utils/notifications";
 
-const { width } = Dimensions.get('window');
+const { width } = Dimensions.get("window");
 
 function ClockWidget() {
   const [time, setTime] = useState(new Date());
@@ -20,65 +36,126 @@ function ClockWidget() {
     return () => clearInterval(t);
   }, []);
 
-  const h = time.getHours().toString().padStart(2, '0');
-  const m = time.getMinutes().toString().padStart(2, '0');
-  const s = time.getSeconds().toString().padStart(2, '0');
+  const h = time.getHours().toString().padStart(2, "0");
+  const m = time.getMinutes().toString().padStart(2, "0");
+  const s = time.getSeconds().toString().padStart(2, "0");
 
-  const dayNames = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'];
-  const monthNames = ['ינואר','פברואר','מרץ','אפריל','מאי','יוני','יולי','אוגוסט','ספטמבר','אוקטובר','נובמבר','דצמבר'];
+  const dayNames = ["ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי", "שבת"];
+  const monthNames = [
+    "ינואר",
+    "פברואר",
+    "מרץ",
+    "אפריל",
+    "מאי",
+    "יוני",
+    "יולי",
+    "אוגוסט",
+    "ספטמבר",
+    "אוקטובר",
+    "נובמבר",
+    "דצמבר",
+  ];
 
   return (
     <View style={styles.clockWidget}>
-      <Text style={styles.clockTime}>{h}:{m}</Text>
+      <Text style={styles.clockTime}>
+        {h}:{m}
+      </Text>
       <Text style={styles.clockSeconds}>:{s}</Text>
       <Text style={styles.clockDate}>
-        יום {dayNames[time.getDay()]}, {time.getDate()} {monthNames[time.getMonth()]} {time.getFullYear()}
+        יום {dayNames[time.getDay()]}, {time.getDate()}{" "}
+        {monthNames[time.getMonth()]} {time.getFullYear()}
       </Text>
     </View>
   );
 }
 
-function AlarmCard({ alarm, onToggle, onDelete, onEdit }) {
+function AlarmCard({ alarm, onToggle, onDelete, onEdit, now }) {
   const scaleAnim = useRef(new Animated.Value(1)).current;
 
   const handleLongPress = () => {
     Animated.sequence([
-      Animated.timing(scaleAnim, { toValue: 0.97, duration: 100, useNativeDriver: true }),
-      Animated.timing(scaleAnim, { toValue: 1, duration: 100, useNativeDriver: true }),
+      Animated.timing(scaleAnim, {
+        toValue: 0.97,
+        duration: 100,
+        useNativeDriver: true,
+      }),
+      Animated.timing(scaleAnim, {
+        toValue: 1,
+        duration: 100,
+        useNativeDriver: true,
+      }),
     ]).start(() => {
-      Alert.alert('מחיקת שעון מעורר', `למחוק את "${alarm.label}"?`, [
-        { text: 'ביטול', style: 'cancel' },
-        { text: 'מחק', style: 'destructive', onPress: () => onDelete(alarm.id) },
+      Alert.alert("מחיקת שעון מעורר", `למחוק את "${alarm.label}"?`, [
+        { text: "ביטול", style: "cancel" },
+        {
+          text: "מחק",
+          style: "destructive",
+          onPress: () => onDelete(alarm.id),
+        },
       ]);
     });
   };
 
-  const taskIcons = { math: '🧮', word: '📝', sequence: '🔢', none: '' };
-  const activeDays = alarm.days.map(d => DAY_LABELS[d]).join(' ');
+  const taskIcons = { math: "🧮", word: "📝", sequence: "🔢", none: "" };
+  const activeDays = [...alarm.days]
+    .sort((a, b) => a - b)
+    .map((d) => DAY_LABELS[d])
+    .join(" ");
+  const selectedTasks = Array.from(
+    new Set(
+      alarm.tasks !== undefined ? alarm.tasks : alarm.task ? [alarm.task] : [],
+    ),
+  ).filter((t) => t !== "none");
+  const nextAlarmMs = getNextAlarmMs(alarm.hour, alarm.minute, alarm.days);
+  const timeUntilMs = nextAlarmMs ? nextAlarmMs - now : null;
+
+  const formatCountdown = (ms) => {
+    if (ms === null || ms <= 0) return "בקרוב";
+    const totalMinutes = Math.ceil(ms / 60000);
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
+    if (hours > 0) return `יתחיל בעוד ${hours}ש ${minutes}ד`;
+    return `יתחיל בעוד ${minutes}ד`;
+  };
 
   return (
-    <Animated.View style={[styles.cardWrapper, { transform: [{ scale: scaleAnim }] }]}>
+    <Animated.View
+      style={[styles.cardWrapper, { transform: [{ scale: scaleAnim }] }]}
+    >
       <TouchableOpacity
         onPress={() => onEdit(alarm)}
         onLongPress={handleLongPress}
         activeOpacity={0.85}
       >
         <LinearGradient
-          colors={alarm.enabled ? ['#1a1a2e', '#16213e'] : ['#111118', '#0d0d15']}
+          colors={
+            alarm.enabled ? ["#1a1a2e", "#16213e"] : ["#111118", "#0d0d15"]
+          }
           style={[styles.card, !alarm.enabled && styles.cardDisabled]}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
         >
           <View style={styles.cardLeft}>
             <View style={styles.timeRow}>
-              <Text style={[styles.alarmTime, !alarm.enabled && styles.dimText]}>
+              <Text
+                style={[styles.alarmTime, !alarm.enabled && styles.dimText]}
+              >
                 {formatAlarmTime(alarm.hour, alarm.minute)}
               </Text>
-              {alarm.task !== 'none' && (
-                <Text style={styles.taskBadge}>{taskIcons[alarm.task]}</Text>
+              {selectedTasks.length > 0 && (
+                <View style={styles.taskIconsRow}>
+                  {selectedTasks.map((taskKey) => (
+                    <Text key={taskKey} style={styles.taskBadge}>
+                      {taskIcons[taskKey]}
+                    </Text>
+                  ))}
+                </View>
               )}
             </View>
-            <Text style={[styles.alarmLabel, !alarm.enabled && styles.dimText]}>{alarm.label}</Text>
+            <Text style={[styles.alarmLabel, !alarm.enabled && styles.dimText]}>
+              {alarm.label}
+            </Text>
             <View style={styles.metaRow}>
               {alarm.days.length > 0 ? (
                 <Text style={styles.metaText}>{activeDays}</Text>
@@ -86,26 +163,33 @@ function AlarmCard({ alarm, onToggle, onDelete, onEdit }) {
                 <Text style={styles.metaText}>פעם אחת</Text>
               )}
               <Text style={styles.metaDot}>·</Text>
-              <Text style={styles.metaText}>מקסימום {alarm.ringDuration}ש׳</Text>
+              <Text style={styles.metaText}>
+                מקסימום {alarm.ringDuration}ש׳
+              </Text>
               {alarm.snoozeLimit > 0 && (
                 <>
                   <Text style={styles.metaDot}>·</Text>
-                  <Text style={styles.metaText}>נודניק {alarm.snoozeLimit}ד׳</Text>
+                  <Text style={styles.metaText}>
+                    נודניק {alarm.snoozeLimit}ד׳
+                  </Text>
                 </>
               )}
             </View>
+            {alarm.enabled && timeUntilMs !== null ? (
+              <Text style={styles.countdownText}>
+                {formatCountdown(timeUntilMs)}
+              </Text>
+            ) : null}
           </View>
           <View style={styles.cardRight}>
             <Switch
               value={alarm.enabled}
               onValueChange={() => onToggle(alarm.id, !alarm.enabled)}
-              trackColor={{ false: '#2a2a3e', true: '#6c63ff' }}
-              thumbColor={alarm.enabled ? '#a89dff' : '#555566'}
+              trackColor={{ false: "#2a2a3e", true: "#6c63ff" }}
+              thumbColor={alarm.enabled ? "#a89dff" : "#555566"}
             />
           </View>
-          {alarm.enabled && (
-            <View style={styles.activeIndicator} />
-          )}
+          {alarm.enabled && <View style={styles.activeIndicator} />}
         </LinearGradient>
       </TouchableOpacity>
     </Animated.View>
@@ -114,17 +198,23 @@ function AlarmCard({ alarm, onToggle, onDelete, onEdit }) {
 
 export default function HomeScreen({ navigation }) {
   const [alarms, setAlarms] = useState([]);
+  const [now, setNow] = useState(Date.now());
 
   useFocusEffect(
     useCallback(() => {
       loadAlarms().then(setAlarms);
-    }, [])
+    }, []),
   );
+
+  useEffect(() => {
+    const interval = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   const handleToggle = async (id, enabled) => {
     const updated = await updateAlarm(id, { enabled });
     setAlarms(updated);
-    const alarm = updated.find(a => a.id === id);
+    const alarm = updated.find((a) => a.id === id);
     if (alarm) {
       if (enabled) {
         await scheduleAlarmNotification(alarm);
@@ -141,16 +231,16 @@ export default function HomeScreen({ navigation }) {
   };
 
   const handleEdit = (alarm) => {
-    navigation.navigate('EditAlarm', { alarm });
+    navigation.navigate("EditAlarm", { alarm });
   };
 
-  const activeCount = alarms.filter(a => a.enabled).length;
+  const activeCount = alarms.filter((a) => a.enabled).length;
 
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="#0a0a0f" />
       <LinearGradient
-        colors={['#0a0a0f', '#0d0d1a', '#0a0a0f']}
+        colors={["#0a0a0f", "#0d0d1a", "#0a0a0f"]}
         style={StyleSheet.absoluteFill}
       />
 
@@ -159,16 +249,18 @@ export default function HomeScreen({ navigation }) {
         <View>
           <Text style={styles.appTitle}>WakeUp</Text>
           <Text style={styles.appSubtitle}>
-            {activeCount > 0 ? `${activeCount} שעונים פעילים` : 'אין שעונים פעילים'}
+            {activeCount > 0
+              ? `${activeCount} שעונים פעילים`
+              : "אין שעונים פעילים"}
           </Text>
         </View>
         <TouchableOpacity
           style={styles.addButton}
-          onPress={() => navigation.navigate('EditAlarm', { alarm: null })}
+          onPress={() => navigation.navigate("EditAlarm", { alarm: null })}
           activeOpacity={0.8}
         >
           <LinearGradient
-            colors={['#6c63ff', '#9b5de5']}
+            colors={["#6c63ff", "#9b5de5"]}
             style={styles.addButtonGrad}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
@@ -186,15 +278,20 @@ export default function HomeScreen({ navigation }) {
         <View style={styles.emptyState}>
           <Text style={styles.emptyEmoji}>⏰</Text>
           <Text style={styles.emptyTitle}>אין שעוני מעורר</Text>
-          <Text style={styles.emptySubtitle}>לחץ על + כדי להוסיף שעון מעורר חדש</Text>
+          <Text style={styles.emptySubtitle}>
+            לחץ על + כדי להוסיף שעון מעורר חדש
+          </Text>
         </View>
       ) : (
         <FlatList
-          data={alarms.sort((a, b) => a.hour * 60 + a.minute - (b.hour * 60 + b.minute))}
-          keyExtractor={item => item.id}
+          data={alarms.sort(
+            (a, b) => a.hour * 60 + a.minute - (b.hour * 60 + b.minute),
+          )}
+          keyExtractor={(item) => item.id}
           renderItem={({ item }) => (
             <AlarmCard
               alarm={item}
+              now={now}
               onToggle={handleToggle}
               onDelete={handleDelete}
               onEdit={handleEdit}
@@ -211,33 +308,33 @@ export default function HomeScreen({ navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0a0a0f',
+    backgroundColor: "#0a0a0f",
   },
   header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     paddingHorizontal: 24,
     paddingTop: 56,
     paddingBottom: 8,
   },
   appTitle: {
     fontSize: 32,
-    fontWeight: '800',
-    color: '#ffffff',
+    fontWeight: "800",
+    color: "#ffffff",
     letterSpacing: -0.5,
   },
   appSubtitle: {
     fontSize: 13,
-    color: '#6c63ff',
+    color: "#6c63ff",
     marginTop: 2,
     letterSpacing: 0.3,
   },
   addButton: {
     borderRadius: 20,
-    overflow: 'hidden',
+    overflow: "hidden",
     elevation: 8,
-    shadowColor: '#6c63ff',
+    shadowColor: "#6c63ff",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.4,
     shadowRadius: 8,
@@ -246,35 +343,35 @@ const styles = StyleSheet.create({
     width: 52,
     height: 52,
     borderRadius: 26,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
   clockWidget: {
-    alignItems: 'center',
+    alignItems: "center",
     paddingVertical: 24,
     paddingHorizontal: 24,
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'center',
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "center",
   },
   clockTime: {
     fontSize: 72,
-    fontWeight: '200',
-    color: '#ffffff',
+    fontWeight: "200",
+    color: "#ffffff",
     letterSpacing: -2,
   },
   clockSeconds: {
     fontSize: 30,
-    fontWeight: '200',
-    color: '#6c63ff',
+    fontWeight: "200",
+    color: "#6c63ff",
     marginTop: 28,
     letterSpacing: -1,
   },
   clockDate: {
-    width: '100%',
-    textAlign: 'center',
+    width: "100%",
+    textAlign: "center",
     fontSize: 14,
-    color: '#55556a',
+    color: "#55556a",
     marginTop: -4,
     letterSpacing: 0.5,
   },
@@ -286,7 +383,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     borderRadius: 20,
     elevation: 6,
-    shadowColor: '#000',
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
@@ -294,22 +391,28 @@ const styles = StyleSheet.create({
   card: {
     borderRadius: 20,
     padding: 20,
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     borderWidth: 1,
-    borderColor: '#1e1e30',
-    overflow: 'hidden',
+    borderColor: "#1e1e30",
+    overflow: "hidden",
   },
   cardDisabled: {
     opacity: 0.5,
   },
+  countdownText: {
+    marginTop: 8,
+    fontSize: 13,
+    color: "#a89dff",
+    fontWeight: "500",
+  },
   activeIndicator: {
-    position: 'absolute',
+    position: "absolute",
     left: 0,
     top: 16,
     bottom: 16,
     width: 3,
-    backgroundColor: '#6c63ff',
+    backgroundColor: "#6c63ff",
     borderTopRightRadius: 3,
     borderBottomRightRadius: 3,
   },
@@ -320,49 +423,54 @@ const styles = StyleSheet.create({
     marginLeft: 12,
   },
   timeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 8,
   },
   alarmTime: {
     fontSize: 42,
-    fontWeight: '300',
-    color: '#ffffff',
+    fontWeight: "300",
+    color: "#ffffff",
     letterSpacing: -1,
   },
   taskBadge: {
     fontSize: 22,
     marginTop: 4,
   },
+  taskIconsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
   dimText: {
-    color: '#44445a',
+    color: "#44445a",
   },
   alarmLabel: {
     fontSize: 14,
-    color: '#8888aa',
+    color: "#8888aa",
     marginTop: 2,
     letterSpacing: 0.3,
   },
   metaRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     marginTop: 8,
     gap: 4,
-    flexWrap: 'wrap',
+    flexWrap: "wrap",
   },
   metaText: {
     fontSize: 11,
-    color: '#44445a',
+    color: "#44445a",
     letterSpacing: 0.3,
   },
   metaDot: {
     fontSize: 11,
-    color: '#33334a',
+    color: "#33334a",
   },
   emptyState: {
     flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     paddingBottom: 60,
   },
   emptyEmoji: {
@@ -371,13 +479,13 @@ const styles = StyleSheet.create({
   },
   emptyTitle: {
     fontSize: 22,
-    fontWeight: '600',
-    color: '#ffffff',
+    fontWeight: "600",
+    color: "#ffffff",
     marginBottom: 8,
   },
   emptySubtitle: {
     fontSize: 14,
-    color: '#44445a',
-    textAlign: 'center',
+    color: "#44445a",
+    textAlign: "center",
   },
 });

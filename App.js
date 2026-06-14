@@ -1,18 +1,24 @@
-import React, { useEffect } from 'react';
-import { StatusBar } from 'expo-status-bar';
-import { NavigationContainer } from '@react-navigation/native';
-import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { TouchableOpacity, View } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import React, { useEffect } from "react";
+import { StatusBar } from "expo-status-bar";
+import {
+  NavigationContainer,
+  createNavigationContainerRef,
+} from "@react-navigation/native";
+import { createNativeStackNavigator } from "@react-navigation/native-stack";
+import { TouchableOpacity, View } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
 
-import HomeScreen from './src/screens/HomeScreen';
-import EditAlarmScreen from './src/screens/EditAlarmScreen';
-import AlarmRingingScreen from './src/screens/AlarmRingingScreen';
+import HomeScreen from "./src/screens/HomeScreen";
+import EditAlarmScreen from "./src/screens/EditAlarmScreen";
+import AlarmRingingScreen from "./src/screens/AlarmRingingScreen";
 import {
   requestNotificationPermissions,
   setupNotificationChannel,
-} from './src/utils/notifications';
+} from "./src/utils/notifications";
+import * as Notifications from "expo-notifications";
+
+const navigationRef = createNavigationContainerRef();
 
 const Stack = createNativeStackNavigator();
 
@@ -22,21 +28,43 @@ export default function App() {
       await setupNotificationChannel();
       await requestNotificationPermissions();
     })();
+
+    const responseListener =
+      Notifications.addNotificationResponseReceivedListener((response) => {
+        const alarmId = response.notification.request.content.data?.alarmId;
+        if (alarmId && navigationRef.isReady()) {
+          navigationRef.navigate("AlarmRinging", { alarmId });
+        }
+      });
+
+    const receivedListener = Notifications.addNotificationReceivedListener(
+      (notification) => {
+        const alarmId = notification.request.content.data?.alarmId;
+        if (alarmId && navigationRef.isReady()) {
+          navigationRef.navigate("AlarmRinging", { alarmId });
+        }
+      },
+    );
+
+    return () => {
+      Notifications.removeNotificationSubscription(responseListener);
+      Notifications.removeNotificationSubscription(receivedListener);
+    };
   }, []);
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <NavigationContainer>
+      <NavigationContainer ref={navigationRef}>
         <StatusBar style="light" />
         <Stack.Navigator
           screenOptions={{
-            headerStyle: { backgroundColor: '#0a0a0f' },
-            headerTintColor: '#ffffff',
-            headerTitleStyle: { fontWeight: '600', fontSize: 17 },
+            headerStyle: { backgroundColor: "#0a0a0f" },
+            headerTintColor: "#ffffff",
+            headerTitleStyle: { fontWeight: "600", fontSize: 17 },
             headerBackTitleVisible: false,
             headerShadowVisible: false,
-            contentStyle: { backgroundColor: '#0a0a0f' },
-            animation: 'slide_from_right',
+            contentStyle: { backgroundColor: "#0a0a0f" },
+            animation: "slide_from_right",
           }}
         >
           <Stack.Screen
@@ -48,7 +76,7 @@ export default function App() {
             name="EditAlarm"
             component={EditAlarmScreen}
             options={({ navigation }) => ({
-              title: 'שעון מעורר חדש',
+              title: "שעון מעורר חדש",
               headerLeft: () => (
                 <TouchableOpacity
                   onPress={() => navigation.goBack()}
@@ -65,7 +93,7 @@ export default function App() {
             options={{
               headerShown: false,
               gestureEnabled: false,
-              animation: 'fade',
+              animation: "fade",
             }}
           />
         </Stack.Navigator>
